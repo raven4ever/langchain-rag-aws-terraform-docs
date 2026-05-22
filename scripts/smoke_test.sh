@@ -17,26 +17,26 @@
 set -euo pipefail
 
 API="${API:-http://localhost:8000}"
-TF_PATH="${TF_PATH:-../data/terraform}"
-AWS_PATH="${AWS_PATH:-../data/aws}"
 TIMEOUT_S="${TIMEOUT_S:-600}"
+SERVICES_LIST="${SERVICES_LIST:-iam s3 ec2 vpc lambda rds cloudwatch cloudformation route53 dynamodb}"
 
 bold()  { printf '\033[1m%s\033[0m\n' "$*"; }
 green() { printf '\033[32m%s\033[0m\n' "$*"; }
 fail()  { printf '\033[31mFAIL: %s\033[0m\n' "$*" >&2; exit 1; }
 
 ingest_and_wait() {
-  local source="$1" path="$2"
-  bold "==> /ingest (source=${source} path=${path})"
+  # ingest_and_wait <source> <path> <service>
+  local source="$1" path="$2" service="$3"
+  bold "==> /ingest (service=${service} source=${source} path=${path})"
   local resp job_id deadline status_body status
   resp="$(curl -fsS -X POST "${API}/ingest" \
     -H 'Content-Type: application/json' \
-    -d "{\"source\":\"${source}\",\"path\":\"${path}\"}")"
+    -d "{\"source\":\"${source}\",\"path\":\"${path}\",\"service\":\"${service}\"}")"
   echo "${resp}"
   job_id="$(echo "${resp}" | sed -n 's/.*"job_id":"\([^"]*\)".*/\1/p')"
-  [[ -n "${job_id}" ]] || fail "no job_id in response (source=${source})"
+  [[ -n "${job_id}" ]] || fail "no job_id in response (service=${service} source=${source})"
 
-  bold "==> Poll job ${job_id}"
+  bold "==> Poll job ${job_id} (service=${service} source=${source})"
   deadline=$(( $(date +%s) + TIMEOUT_S ))
   while :; do
     status_body="$(curl -fsS "${API}/ingest/${job_id}")"
@@ -44,13 +44,14 @@ ingest_and_wait() {
     echo "  status=${status}"
     case "${status}" in
       complete) break ;;
-      failed)   fail "ingest failed: ${status_body}" ;;
+      failed)   fail "ingest failed (service=${service} source=${source}): ${status_body}" ;;
     esac
     if (( $(date +%s) > deadline )); then
-      fail "ingest timed out after ${TIMEOUT_S}s (last: ${status_body})"
+      fail "ingest timed out after ${TIMEOUT_S}s (service=${service} source=${source}; last: ${status_body})"
     fi
     sleep 2
   done
+  green "    ingestion for service=${service} source=${source} FINISHED"
 }
 
 ask_and_assert() {
@@ -85,8 +86,10 @@ echo "${HEALTH}"
 echo "${HEALTH}" | grep -q '"ollama":true' || fail "ollama not healthy"
 echo "${HEALTH}" | grep -q '"chroma":true' || fail "chroma not healthy"
 
-ingest_and_wait "terraform" "${TF_PATH}"
-ingest_and_wait "aws"       "${AWS_PATH}"
+for svc in ${SERVICES_LIST}; do
+  ingest_and_wait "terraform" "/data/${svc}/terraform" "${svc}"
+  ingest_and_wait "aws"       "/data/${svc}/aws"       "${svc}"
+done
 
 # Five questions, ordered easiest → hardest.
 # Each is a `keyword|question` pair. Keyword is case-insensitive substring.

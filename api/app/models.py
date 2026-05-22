@@ -10,6 +10,7 @@ JobStatus = Literal["pending", "running", "complete", "failed"]
 class IngestRequest(BaseModel):
     source: SourceName
     path: str = Field(..., description="Filesystem path inside the api container")
+    service: str | None = None
 
 
 class IngestResponse(BaseModel):
@@ -22,6 +23,7 @@ class IngestJob(BaseModel):
     status: JobStatus
     source: SourceName
     path: str
+    service: str | None = None
     chunks_ingested: int = 0
     error: str | None = None
 

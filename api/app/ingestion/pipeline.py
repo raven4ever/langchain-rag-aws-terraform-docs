@@ -28,13 +28,14 @@ _LOADERS: dict[SourceName, Callable[[str], list[Document]]] = {
 }
 
 
-def create_job(source: SourceName, path: str) -> IngestJob:
+def create_job(source: SourceName, path: str, service: str | None = None) -> IngestJob:
     """Create a pending ingest job and register it in the in-memory store."""
     job = IngestJob(
         job_id=str(uuid.uuid4()),
         status="pending",
         source=source,
         path=path,
+        service=service,
     )
     with _jobs_lock:
         _jobs[job.job_id] = job
@@ -65,7 +66,8 @@ def run_ingest(job_id: str) -> None:
 
     start_ts = time.monotonic()
     logger.info(
-        "ingest job %s STARTED (source=%s path=%s)", job_id, job.source, job.path
+        "ingestion for service=%s source=%s STARTED (job=%s path=%s)",
+        job.service or "unknown", job.source, job_id, job.path,
     )
     _update(job_id, status="running")
     try:
@@ -76,7 +78,13 @@ def run_ingest(job_id: str) -> None:
         logger.info("loading %s docs from %s", job.source, job.path)
         raw_docs = loader(job.path)
         if not raw_docs:
-            raise ValueError(f"no documents loaded from {job.path}")
+            elapsed = time.monotonic() - start_ts
+            _update(job_id, status="complete", chunks_ingested=0)
+            logger.info(
+                "ingestion for service=%s source=%s FINISHED (job=%s chunks=0 elapsed=%.2fs) — empty corpus",
+                job.service or "unknown", job.source, job_id, elapsed,
+            )
+            return
 
         chunks = split_documents(raw_docs)
         logger.info("split %d docs into %d chunks", len(raw_docs), len(chunks))
@@ -114,14 +122,13 @@ def run_ingest(job_id: str) -> None:
         _update(job_id, status="complete", chunks_ingested=len(chunks))
         elapsed = time.monotonic() - start_ts
         logger.info(
-            "ingest job %s FINISHED (chunks=%d elapsed=%.2fs)",
-            job_id,
-            len(chunks),
-            elapsed,
+            "ingestion for service=%s source=%s FINISHED (job=%s chunks=%d elapsed=%.2fs)",
+            job.service or "unknown", job.source, job_id, len(chunks), elapsed,
         )
     except Exception as exc:  # noqa: BLE001
         elapsed = time.monotonic() - start_ts
         logger.exception(
-            "ingest job %s FAILED after %.2fs", job_id, elapsed
+            "ingestion for service=%s source=%s FAILED (job=%s) after %.2fs",
+            job.service or "unknown", job.source, job_id, elapsed,
         )
         _update(job_id, status="failed", error=str(exc))

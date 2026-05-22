@@ -12,7 +12,7 @@ router = APIRouter(tags=["ingest"])
 @router.post("/ingest", response_model=IngestResponse, status_code=202)
 def start_ingest(req: IngestRequest, background: BackgroundTasks) -> IngestResponse:
     """Create ingest job and schedule background run."""
-    job = create_job(req.source, req.path)
+    job = create_job(req.source, req.path, req.service)
     background.add_task(run_ingest, job.job_id)
     return IngestResponse(job_id=job.job_id, status=job.status)
 
