@@ -43,7 +43,7 @@ echo "==> Fetching AWS docs"
 IAM_UG_URL="https://docs.aws.amazon.com/IAM/latest/UserGuide/iam-ug.pdf"
 IAM_API_URL="https://docs.aws.amazon.com/IAM/latest/APIReference/iam-api.pdf"
 # CloudFormation resource spec (us-east-1 distribution). Uncompressed JSON.
-CFN_SPEC_URL="https://d1uauaxba7bl26.cloudfront.net/latest/gzip/CloudFormationResourceSpecification.json"
+CFN_SPEC_URL="https://d1uauaxba7bl26.cloudfront.net/latest/CloudFormationResourceSpecification.json"
 
 # -L follows 302 redirects from docs.aws.amazon.com; -fS fails loud on HTTP errors.
 curl -fSL -o "${AWS_DIR}/iam-user-guide.pdf"    "${IAM_UG_URL}"
