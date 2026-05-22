@@ -20,7 +20,7 @@ DATA_DIR="${REPO_ROOT}/data"
 TF_DIR="${DATA_DIR}/terraform"
 AWS_DIR="${DATA_DIR}/aws"
 
-SERVICES="${SERVICES:-iam}"
+SERVICES="${SERVICES:-iam s3 ec2 vpc lambda rds cloudwatch cloudformation route53 dynamodb}"
 
 mkdir -p "${TF_DIR}" "${AWS_DIR}"
 
@@ -42,6 +42,23 @@ aws_urls() {
       ;;
     rds)
       echo "https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-ug.pdf|https://docs.aws.amazon.com/AmazonRDS/latest/APIReference/rds-api.pdf|AWS::RDS::"
+      ;;
+    vpc)
+      # VPC API operations live under the EC2 API reference — reuse that URL.
+      echo "https://docs.aws.amazon.com/vpc/latest/userguide/vpc-ug.pdf|https://docs.aws.amazon.com/AWSEC2/latest/APIReference/ec2-api.pdf|AWS::EC2::VPC"
+      ;;
+    cloudwatch)
+      echo "https://docs.aws.amazon.com/AmazonCloudWatch/latest/monitoring/acw-ug.pdf|https://docs.aws.amazon.com/AmazonCloudWatch/latest/APIReference/acw-api.pdf|AWS::CloudWatch::"
+      ;;
+    cloudformation)
+      echo "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/cfn-ug.pdf|https://docs.aws.amazon.com/AWSCloudFormation/latest/APIReference/cfn-api.pdf|AWS::CloudFormation::"
+      ;;
+    route53)
+      # Route 53 API reference is not published as a downloadable PDF; reuse the DG URL.
+      echo "https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/route53-dg.pdf|https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/route53-dg.pdf|AWS::Route53::"
+      ;;
+    dynamodb)
+      echo "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/dynamodb-dg.pdf|https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/dynamodb-api.pdf|AWS::DynamoDB::"
       ;;
     *)
       return 1

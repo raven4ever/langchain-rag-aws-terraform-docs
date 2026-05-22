@@ -10,9 +10,9 @@
 #   1. Hits /health, asserts both deps reachable.
 #   2. POSTs /ingest for the terraform corpus + polls to completion.
 #   3. POSTs /ingest for the aws corpus + polls to completion.
-#   4. POSTs /ask with a cross-source question.
-#   5. Asserts the answer is non-empty, contains an expected keyword, and
-#      that the sources[] array is non-empty (Phase 2 citation contract).
+#   4. Asks 5 questions of increasing complexity. 3 are cross-service.
+#   5. For each, asserts a non-empty answer, presence of an expected keyword,
+#      and a non-empty sources[] array (Phase 2 citation contract).
 
 set -euo pipefail
 
@@ -20,11 +20,10 @@ API="${API:-http://localhost:8000}"
 TF_PATH="${TF_PATH:-../data/terraform}"
 AWS_PATH="${AWS_PATH:-../data/aws}"
 TIMEOUT_S="${TIMEOUT_S:-600}"
-EXPECT_KEYWORD="${EXPECT_KEYWORD:-assume_role_policy}"
-QUESTION="${QUESTION:-What argument on aws_iam_role sets the trust policy, and what does the AWS IAM service require it to contain?}"
 
-bold() { printf '\033[1m%s\033[0m\n' "$*"; }
-fail() { printf '\033[31mFAIL: %s\033[0m\n' "$*" >&2; exit 1; }
+bold()  { printf '\033[1m%s\033[0m\n' "$*"; }
+green() { printf '\033[32m%s\033[0m\n' "$*"; }
+fail()  { printf '\033[31mFAIL: %s\033[0m\n' "$*" >&2; exit 1; }
 
 ingest_and_wait() {
   local source="$1" path="$2"
@@ -54,6 +53,32 @@ ingest_and_wait() {
   done
 }
 
+ask_and_assert() {
+  # ask_and_assert <label> <expect_keyword> <question>
+  local label="$1" kw="$2" question="$3"
+  bold "==> ${label}"
+  echo "    Q: ${question}"
+  local body resp answer sources_count
+  body="$(printf '%s' "${question}" | python3 -c 'import json,sys; print(json.dumps({"question": sys.stdin.read()}))')"
+  resp="$(curl -fsS -X POST "${API}/ask" \
+    -H 'Content-Type: application/json' \
+    -d "${body}")"
+  answer="$(echo "${resp}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["answer"])')"
+  sources_count="$(echo "${resp}" | python3 -c 'import json,sys; print(len(json.load(sys.stdin).get("sources",[])))')"
+
+  echo "    --- ANSWER (${#answer} chars, ${sources_count} sources) ---"
+  echo "${answer}" | sed 's/^/    /'
+
+  [[ -n "${answer}" ]]              || fail "${label}: empty answer"
+  echo "${answer}" | grep -qi "${kw}" \
+    || fail "${label}: answer missing expected keyword '${kw}'"
+  [[ "${sources_count}" -gt 0 ]] \
+    || fail "${label}: sources[] is empty (Phase 2 expects citations)"
+  green "    OK (sources=${sources_count})"
+}
+
+# Health + ingest ------------------------------------------------------------
+
 bold "==> /health"
 HEALTH="$(curl -fsS "${API}/health")"
 echo "${HEALTH}"
@@ -63,19 +88,30 @@ echo "${HEALTH}" | grep -q '"chroma":true' || fail "chroma not healthy"
 ingest_and_wait "terraform" "${TF_PATH}"
 ingest_and_wait "aws"       "${AWS_PATH}"
 
-bold "==> /ask"
-ASK="$(curl -fsS -X POST "${API}/ask" \
-  -H 'Content-Type: application/json' \
-  -d "$(printf '{"question":%s}' "$(printf '%s' "${QUESTION}" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')")")"
-echo "${ASK}"
+# Five questions, ordered easiest → hardest.
+# Each is a `keyword|question` pair. Keyword is case-insensitive substring.
+# (3 of the 5 are cross-service; service pairs picked across the top-10 list.)
 
-ANSWER="$(echo "${ASK}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["answer"])')"
-SOURCES_COUNT="$(echo "${ASK}" | python3 -c 'import json,sys; print(len(json.load(sys.stdin).get("sources",[])))')"
+QUESTIONS=(
+  # 1. Single-service, basic.
+  "aws_iam_role|How do I create an IAM role in Terraform?"
 
-[[ -n "${ANSWER}" ]] || fail "empty answer"
-echo "${ANSWER}" | grep -qi "${EXPECT_KEYWORD}" \
-  || fail "answer missing expected keyword '${EXPECT_KEYWORD}'"
-[[ "${SOURCES_COUNT}" -gt 0 ]] \
-  || fail "sources[] is empty — Phase 2 expects inline citations"
+  # 2. Single-service, slightly deeper config.
+  "aws_s3_bucket|How do I enable versioning on an S3 bucket using the Terraform AWS provider?"
 
-bold "==> PASS (sources=${SOURCES_COUNT})"
+  # 3. Cross-service (IAM + Lambda + S3).
+  "lambda|How do I grant an AWS Lambda function read and write permissions to an S3 bucket, using an IAM role attached to the function?"
+
+  # 4. Cross-service (CloudWatch + RDS).
+  "cloudwatch|How do I configure a CloudWatch alarm in Terraform that fires when an RDS DB instance's CPU utilization stays above 80% for 5 minutes?"
+
+  # 5. Cross-service (Route 53 + Lambda + DynamoDB), most complex.
+  "route53|How do I expose an AWS Lambda function behind a custom domain managed by Route 53, where the function reads and writes to a DynamoDB table, all defined in Terraform?"
+)
+
+for i in "${!QUESTIONS[@]}"; do
+  IFS='|' read -r KW Q <<< "${QUESTIONS[$i]}"
+  ask_and_assert "Q$((i + 1))" "${KW}" "${Q}"
+done
+
+bold "==> PASS (5/5 questions answered with citations)"
