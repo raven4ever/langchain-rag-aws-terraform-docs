@@ -96,7 +96,7 @@ def run_ingest(job_id: str) -> None:
             len(chunks),
             elapsed,
         )
-    except Exception:  # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         elapsed = time.monotonic() - start_ts
         logger.exception(
             "ingest job %s FAILED after %.2fs", job_id, elapsed
