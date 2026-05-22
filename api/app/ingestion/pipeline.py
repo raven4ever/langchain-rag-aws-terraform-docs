@@ -10,7 +10,7 @@ from typing import Callable
 from langchain_core.documents import Document
 
 from app.deps import get_vectorstore
-from app.ingestion.loaders import load_terraform
+from app.ingestion.loaders import load_aws, load_terraform
 from app.ingestion.splitter import split_documents
 from app.models import IngestJob, SourceName
 
@@ -23,7 +23,7 @@ _jobs_lock = threading.Lock()
 
 _LOADERS: dict[SourceName, Callable[[str], list[Document]]] = {
     "terraform": load_terraform,
-    # "aws": load_aws  — Phase 2
+    "aws": load_aws,
 }
 
 

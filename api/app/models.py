@@ -31,10 +31,17 @@ class AskRequest(BaseModel):
     conversation_id: str | None = None
 
 
+class Source(BaseModel):
+    id: int                   # the 1-indexed [N] citation marker from the answer
+    source: SourceName        # "terraform" or "aws"
+    doc_id: str
+    page: int | None = None
+    snippet: str
+
+
 class AskResponse(BaseModel):
     answer: str
-    # Phase 1: empty list. Phase 2 fills with citations.
-    sources: list[dict] = Field(default_factory=list)
+    sources: list[Source] = Field(default_factory=list)
 
 
 class HealthResponse(BaseModel):

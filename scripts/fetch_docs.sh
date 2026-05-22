@@ -38,10 +38,20 @@ echo "==> Terraform IAM docs in ${TF_DIR}:"
 ls "${TF_DIR}" | head
 
 echo
-echo "==> AWS corpus (Phase 2) — placeholder."
-echo "    Drop the following into ${AWS_DIR}/ when ready:"
-echo "      - iam-user-guide.pdf  (AWS IAM User Guide)"
-echo "      - iam-api-reference.pdf  (AWS IAM API Reference)"
-echo "      - CloudFormationResourceSpecification.json  (CFN spec)"
+echo "==> Fetching AWS docs"
+
+IAM_UG_URL="https://docs.aws.amazon.com/IAM/latest/UserGuide/iam-ug.pdf"
+IAM_API_URL="https://docs.aws.amazon.com/IAM/latest/APIReference/iam-api.pdf"
+# CloudFormation resource spec (us-east-1 distribution). Uncompressed JSON.
+CFN_SPEC_URL="https://d1uauaxba7bl26.cloudfront.net/latest/gzip/CloudFormationResourceSpecification.json"
+
+# -L follows 302 redirects from docs.aws.amazon.com; -fS fails loud on HTTP errors.
+curl -fSL -o "${AWS_DIR}/iam-user-guide.pdf"    "${IAM_UG_URL}"
+curl -fSL -o "${AWS_DIR}/iam-api-reference.pdf" "${IAM_API_URL}"
+curl -fSL -o "${AWS_DIR}/CloudFormationResourceSpecification.json" "${CFN_SPEC_URL}"
+
+echo "==> AWS docs in ${AWS_DIR}:"
+ls -lh "${AWS_DIR}"
+
 echo
 echo "Done."

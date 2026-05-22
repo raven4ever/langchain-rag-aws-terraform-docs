@@ -8,6 +8,8 @@ TerraSage is a small RAG application that answers natural-language questions abo
 
 Everything runs locally. No cloud APIs, no per-token costs. The stack is Docker Compose plus a host-side Ollama: FastAPI (Python 3.14) for the API, LangChain (LCEL) for orchestration, Chroma for vector storage, and Ollama for both the LLM and the embedding model.
 
+**Status**: Phase 2 complete (dual-corpus retrieval over Terraform + AWS IAM docs, inline `[N]` citations, typed `sources[]` in every `/ask` response). Phase 3 (retrieval quality — query rewriting, streaming, reranker, conversational memory) is optional/stretch — see `CLAUDE.md`.
+
 ## Requirements
 
 - Docker and Docker Compose (Docker Engine >= 20.10 — required for the `host-gateway` magic value in `extra_hosts`)
@@ -131,6 +133,16 @@ curl -s http://localhost:8000/ingest/<job_id> | python3 -m json.tool
 ```
 
 Wait for `"status": "complete"`.
+
+Then ingest the AWS corpus (drop AWS IAM PDFs / CloudFormation spec JSON into `./data/aws/` first — see `scripts/fetch_docs.sh` placeholder section):
+
+```bash
+curl -X POST http://localhost:8000/ingest \
+  -H 'Content-Type: application/json' \
+  -d '{"source": "aws", "path": "/data/aws"}'
+```
+
+Poll the returned `job_id` the same way as for the Terraform job.
 
 ### 8. Ask a question
 

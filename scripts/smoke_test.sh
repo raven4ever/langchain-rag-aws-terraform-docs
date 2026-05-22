@@ -15,7 +15,7 @@
 set -euo pipefail
 
 API="${API:-http://localhost:8000}"
-FIXTURE_PATH="${FIXTURE_PATH:-/app/tests/fixtures/terraform}"
+FIXTURE_PATH="${FIXTURE_PATH:-../data/terraform}"
 TIMEOUT_S="${TIMEOUT_S:-180}"
 EXPECT_KEYWORD="${EXPECT_KEYWORD:-assume_role_policy}"
 
