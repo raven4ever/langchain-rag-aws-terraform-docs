@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "rag-api"
+name = "terrasage-api"
 version = "0.1.0"
 description = "Local-first RAG over Terraform AWS + AWS IAM docs"
 requires-python = ">=3.14"
