@@ -12,36 +12,5 @@ services:
       - ANONYMIZED_TELEMETRY=FALSE
     restart: unless-stopped
 
-  api:
-    build:
-      context: ./api
-      dockerfile: Dockerfile
-    container_name: rag-api
-    ports:
-      - "8000:8000"
-    environment:
-      - OLLAMA_BASE_URL=http://host.docker.internal:11434
-      - CHROMA_HOST=chroma
-      - CHROMA_PORT=8000
-      - LLM_MODEL=llama3.1:8b
-      - EMBED_MODEL=nomic-embed-text
-      - CHROMA_COLLECTION=iam_docs
-      - DATA_DIR=/data
-    extra_hosts:
-      # Linux: maps host.docker.internal to the host gateway. macOS/Windows auto-resolve.
-      - "host.docker.internal:host-gateway"
-    volumes:
-      - ./data:/data
-    depends_on:
-      chroma:
-        condition: service_started
-    healthcheck:
-      test: [ "CMD", "curl", "-fsS", "http://localhost:8000/health" ]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-    restart: unless-stopped
-
 volumes:
   chroma_data:

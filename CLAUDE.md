@@ -32,45 +32,45 @@ Project context for Claude Code. This file captures the decisions and design for
   - LLM: `llama3.1:8b` (start with `llama3.2:3b` if hardware is constrained)
   - Embeddings: `nomic-embed-text`
 - **Vector store**: Chroma (server mode, separate container)
-- **Containerization**: Docker Compose
+- **Containerization**: Docker Compose (used only for Chroma; the api and Ollama run natively on the host)
 
 ## Architecture
 
-Three services in `docker-compose.yml`:
+Only one service in `docker-compose.yml`. The api process runs natively from `./api/` via `uvicorn` against a Python 3.14 venv, and Ollama runs natively on the host as well.
 
-| Service  | Image / Build             | Port                           | Purpose                 |
-| -------- | ------------------------- | ------------------------------ | ----------------------- |
-| `api`    | local Dockerfile (Python) | 8000                           | FastAPI + LangChain     |
-| `ollama` | `ollama/ollama`           | 11434                          | LLM and embedding model |
-| `chroma` | `chromadb/chroma`         | 8001 (host) → 8000 (container) | Persistent vector store |
+| Service  | Image / Source             | Port                           | Purpose                 |
+| -------- | -------------------------- | ------------------------------ | ----------------------- |
+| `chroma` | `chromadb/chroma` (Docker) | 8001 (host) → 8000 (container) | Persistent vector store |
 
-Named volumes for persistence: `ollama_models`, `chroma_data`. Source docs mounted from `./data/` into the api container.
+Named volume for persistence: `chroma_data`. Source docs are read directly from `./data/` by the host-native api process.
 
-Communication: all internal traffic over the Docker Compose network. The api container reaches Ollama at `http://ollama:11434` and Chroma at `chroma:8000`.
+Communication: the host-native api reaches Chroma at `localhost:8001` and Ollama at `localhost:11434`.
 
 ## Knowledge Base
 
-Two corpora, scoped to **AWS IAM** to keep ingestion manageable.
+Two corpora per service: the Terraform provider docs for the service and the official AWS documentation for the service. The set of services is driven by the `SERVICES` env var consumed by `scripts/fetch_docs.sh`. Default set: `iam s3 ec2 vpc lambda rds cloudwatch cloudformation route53 dynamodb`. Each service gets its own corpus pair on disk under `./data/<svc>/{terraform,aws}/`.
 
-### Corpus 1: Terraform AWS provider docs (IAM resources only)
+### Corpus 1: Terraform AWS provider docs (per service)
 
-- **Source**: `hashicorp/terraform-provider-aws` GitHub repo
-- **Path within repo**: `website/docs/r/iam_*.html.markdown` and `website/docs/d/iam_*.html.markdown`
-- **Format**: Markdown (clean, structured)
-- **Local location**: `./data/terraform/`
+- **Source**: `hashicorp/terraform-provider-aws` GitHub repo (sparse checkout under `data/.tf_checkout/`)
+- **Selection**: for each service in `SERVICES`, copy files whose name starts with `<service>_*.html.markdown` from `website/docs/r/` and `website/docs/d/`.
+- **Format**: Markdown.
+- **Local location**: `./data/<service>/terraform/`
+- **Caveat**: a few AWS services (most notably EC2) have resources in the Terraform provider that lack the expected prefix; the filter misses those by design. Add explicit globs in `fetch_docs.sh` if you need them.
 
-### Corpus 2: AWS IAM documentation
+### Corpus 2: AWS service documentation (per service)
 
-- **Source**: AWS IAM User Guide (PDF) + AWS IAM API Reference + CloudFormation IAM resource spec (JSON)
-- **Why this combo**: avoids scraping `docs.aws.amazon.com` directly. PDF gives prose, API ref gives operations, CFN spec gives authoritative resource schemas.
-- **Local location**: `./data/aws/`
+- **Source**: per-service User Guide PDF + API Reference PDF from `docs.aws.amazon.com`, plus the CloudFormation resource specification JSON.
+- **Selection**: URLs are looked up in the `aws_urls()` registry inside `fetch_docs.sh`. The CFN spec is downloaded once and `jq`-filtered to `AWS::<Service>::*` entries per service.
+- **Local location**: `./data/<service>/aws/`
+- **Fallback**: if `jq` is unavailable, the full unfiltered CFN spec is copied into every service dir (the loader still ingests it; retrieval quality drops slightly).
 
 ### Metadata tagging
 
 Every chunk in Chroma carries:
 
 - `source`: `"terraform"` or `"aws"`
-- `service`: `"iam"` (anticipating future expansion to other services)
+- `service`: the AWS service short name (`"iam"`, `"s3"`, `"ec2"`, ...) — sourced from the `service` field on the ingest job, not inferred from filenames.
 - `doc_id`: filename or stable identifier
 - `page` / `section`: for citations
 - Optional: `resource_type` (e.g., `aws_iam_role`) for Terraform chunks
@@ -148,10 +148,14 @@ Key prompt instructions to bake in:
 ├── docker-compose.yml
 ├── .env.example
 ├── data/                      # source docs (gitignored)
-│   ├── terraform/
-│   └── aws/
+│   ├── iam/
+│   │   ├── terraform/
+│   │   └── aws/
+│   ├── s3/
+│   │   ├── terraform/
+│   │   └── aws/
+│   └── ...                    # per service in SERVICES (see scripts/fetch_docs.sh)
 ├── api/
-│   ├── Dockerfile
 │   ├── pyproject.toml
 │   ├── app/
 │   │   ├── __init__.py
@@ -180,22 +184,25 @@ Key prompt instructions to bake in:
 
 ```bash
 # First-time setup
-docker compose up -d ollama chroma
-docker compose exec ollama ollama pull llama3.1:8b
-docker compose exec ollama ollama pull nomic-embed-text
-./scripts/fetch_docs.sh           # populate ./data/
+docker compose up -d chroma
+./scripts/bootstrap_ollama.sh             # pulls llama3.1:8b + nomic-embed-text on the host Ollama
+./scripts/fetch_docs.sh                   # populate ./data/<svc>/{terraform,aws}/
 
-# Bring up the API
-docker compose up -d api
+# Run the API natively
+cd api
+python3.14 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 # Ingest
 curl -X POST http://localhost:8000/ingest \
   -H 'Content-Type: application/json' \
-  -d '{"source": "terraform", "path": "./data/terraform/"}'
+  -d '{"source": "terraform", "service": "iam", "path": "./data/iam/terraform"}'
 
 curl -X POST http://localhost:8000/ingest \
   -H 'Content-Type: application/json' \
-  -d '{"source": "aws", "path": "./data/aws/"}'
+  -d '{"source": "aws", "service": "iam", "path": "./data/iam/aws"}'
 
 # Ask
 curl -X POST http://localhost:8000/ask \
@@ -281,6 +288,7 @@ These are deliberate choices — please respect them unless explicitly told othe
 6. **No cloud APIs.** Ollama for everything model-related. If a feature requires a paid API, raise it explicitly before adding.
 7. **Single-file artifacts where reasonable.** This is a learning project — readability > over-engineering. Don't split modules prematurely.
 8. **Background tasks via FastAPI's built-in `BackgroundTasks`** for ingestion. No Celery, no Redis queue. Keep the dependency surface small.
+9. **The api does NOT run in a container.** It runs natively against a Python venv in `./api/`. Only Chroma runs in Docker. Ollama runs on the host so it can hit the GPU directly without any docker-in-docker or device passthrough.
 
 ## Common Gotchas to Watch For
 

@@ -2,9 +2,10 @@
 # Phase 2 smoke test against a running stack.
 #
 # Prereqs:
-#   docker compose up -d
-#   ./scripts/bootstrap_ollama.sh   # pulls models
-#   ./scripts/fetch_docs.sh         # populates ./data/terraform/ + ./data/aws/
+#   docker compose up -d chroma     # only chroma runs in docker now
+#   ./scripts/bootstrap_ollama.sh   # pulls models onto the host Ollama
+#   ./scripts/fetch_docs.sh         # populates ./data/<svc>/{terraform,aws}/
+#   uvicorn app.main:app            # run the api natively from ./api/
 #
 # What it does:
 #   1. Hits /health, asserts both deps reachable.
@@ -19,6 +20,8 @@ set -euo pipefail
 API="${API:-http://localhost:8000}"
 TIMEOUT_S="${TIMEOUT_S:-600}"
 SERVICES_LIST="${SERVICES_LIST:-iam s3 ec2 vpc lambda rds cloudwatch cloudformation route53 dynamodb}"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DATA_ROOT="${DATA_ROOT:-${REPO_ROOT}/data}"
 
 bold()  { printf '\033[1m%s\033[0m\n' "$*"; }
 green() { printf '\033[32m%s\033[0m\n' "$*"; }
@@ -87,8 +90,8 @@ echo "${HEALTH}" | grep -q '"ollama":true' || fail "ollama not healthy"
 echo "${HEALTH}" | grep -q '"chroma":true' || fail "chroma not healthy"
 
 for svc in ${SERVICES_LIST}; do
-  ingest_and_wait "terraform" "/data/${svc}/terraform" "${svc}"
-  ingest_and_wait "aws"       "/data/${svc}/aws"       "${svc}"
+  ingest_and_wait "terraform" "${DATA_ROOT}/${svc}/terraform" "${svc}"
+  ingest_and_wait "aws"       "${DATA_ROOT}/${svc}/aws"       "${svc}"
 done
 
 # Five questions, ordered easiest → hardest.
