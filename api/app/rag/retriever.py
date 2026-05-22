@@ -1,7 +1,7 @@
 """Retriever wiring. Phase 2: EnsembleRetriever over Terraform + AWS subsets."""
 from __future__ import annotations
 
-from langchain.retrievers import EnsembleRetriever
+from langchain_community.retrievers import EnsembleRetriever
 from langchain_core.retrievers import BaseRetriever
 
 from app.config import get_settings
