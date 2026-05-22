@@ -9,6 +9,7 @@ from typing import Callable
 
 from langchain_core.documents import Document
 
+from app.config import get_settings
 from app.deps import get_chroma_client, get_vectorstore
 from app.ingestion.loaders import load_aws, load_terraform
 from app.ingestion.splitter import split_documents
@@ -86,17 +87,21 @@ def run_ingest(job_id: str) -> None:
             f"{c.metadata.get('source')}::{c.metadata.get('doc_id')}::{i}"
             for i, c in enumerate(chunks)
         ]
-        # Ask the Chroma server for its current per-call limit instead of guessing.
-        # Falls back to a safe default if the client doesn't expose it.
+        # Compute batch size: min(server count cap, HTTP payload cap).
+        # See README "Chroma batching" for the formula.
+        s = get_settings()
         try:
             server_limit = get_chroma_client().get_max_batch_size()
         except Exception:  # noqa: BLE001
             server_limit = 5461
-        batch_size = max(1, server_limit - 64)  # small headroom
+        per_chunk_bytes = s.chunk_size + s.embed_dim * 4 + 512  # text+vector+meta+JSON overhead
+        http_limit = max(1, s.chroma_http_max_bytes // per_chunk_bytes)
+        batch_size = max(1, min(server_limit, http_limit) - 64)
         total = len(chunks)
         logger.info(
-            "ingest job %s upserting %d chunks in batches of %d (server limit=%d)",
-            job_id, total, batch_size, server_limit,
+            "ingest job %s upserting %d chunks in batches of %d "
+            "(server_cap=%d, http_cap=%d, per_chunk=%dB)",
+            job_id, total, batch_size, server_limit, http_limit, per_chunk_bytes,
         )
         for start in range(0, total, batch_size):
             end = min(start + batch_size, total)

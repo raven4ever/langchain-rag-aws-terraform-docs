@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     chunk_size: int = 1000
     chunk_overlap: int = 150
 
+    # Ingest batching — used to keep upserts under Chroma's HTTP payload cap.
+    embed_dim: int = 768                       # nomic-embed-text=768, mxbai-large=1024, bge-m3=1024
+    chroma_http_max_bytes: int = 4 * 1024 * 1024  # conservative; many proxies cap at 4MB
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
