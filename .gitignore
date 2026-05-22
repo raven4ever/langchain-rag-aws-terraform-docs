@@ -1,0 +1,15 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# Source docs are fetched, not committed
+data/
+!data/.gitkeep
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
