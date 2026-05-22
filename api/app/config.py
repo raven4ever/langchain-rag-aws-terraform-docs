@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     chroma_host: str = "localhost"
     chroma_port: int = 8001
     llm_model: str = "llama3.1:8b"
-    embed_model: str = "nomic-embed-text"
+    embed_model: str = "nomic-embed-text:latest"
     chroma_collection: str = "iam_docs"
     data_dir: str = "./data"
 

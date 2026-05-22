@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from langchain_community.document_loaders import PyPDFLoader, TextLoader
+from langchain_community.document_loaders import PyMuPDFLoader, TextLoader
 from langchain_core.documents import Document
 
 
@@ -60,7 +60,7 @@ def load_aws(path: str) -> list[Document]:
     for f in sorted(set(files)):
         suffix = f.suffix.lower()
         if suffix == ".pdf":
-            loaded = PyPDFLoader(str(f)).load()
+            loaded = PyMuPDFLoader(str(f)).load()
         else:
             loaded = TextLoader(str(f), encoding="utf-8").load()
 
