@@ -37,9 +37,9 @@ services:
         condition: service_started
     healthcheck:
       test: [ "CMD", "curl", "-fsS", "http://localhost:8000/health" ]
-      interval: 15s
+      interval: 5s
       timeout: 5s
-      retries: 8
+      retries: 10
       start_period: 10s
     restart: unless-stopped
 
