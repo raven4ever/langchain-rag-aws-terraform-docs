@@ -140,6 +140,14 @@ curl -X POST http://localhost:8000/ask \
   -d '{"question": "How do I create an IAM role with a custom trust policy in Terraform?"}'
 ```
 
+## Interactive API docs
+
+FastAPI auto-generates an OpenAPI schema and serves two browser UIs:
+
+- **Swagger UI** — http://localhost:8000/docs (try-it-out form for every endpoint)
+- **ReDoc** — http://localhost:8000/redoc (read-only reference)
+- Raw schema — http://localhost:8000/openapi.json (importable into Postman/Insomnia if needed)
+
 ## Running the API outside Docker
 
 For local Python development (without rebuilding the container on each change), the api can be run directly. This is the only case where `.env` matters — `pydantic-settings` loads it at startup. The compose stack passes all settings via the `environment:` block instead, so `.env` is ignored when running in the container.
