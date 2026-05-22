@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 import uuid
 from typing import Callable
 
@@ -61,6 +62,10 @@ def run_ingest(job_id: str) -> None:
         logger.error("ingest job %s vanished before start", job_id)
         return
 
+    start_ts = time.monotonic()
+    logger.info(
+        "ingest job %s STARTED (source=%s path=%s)", job_id, job.source, job.path
+    )
     _update(job_id, status="running")
     try:
         loader = _LOADERS.get(job.source)
@@ -84,7 +89,16 @@ def run_ingest(job_id: str) -> None:
         vs.add_documents(chunks, ids=ids)
 
         _update(job_id, status="complete", chunks_ingested=len(chunks))
-        logger.info("ingest job %s complete: %d chunks", job_id, len(chunks))
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("ingest job %s failed", job_id)
+        elapsed = time.monotonic() - start_ts
+        logger.info(
+            "ingest job %s FINISHED (chunks=%d elapsed=%.2fs)",
+            job_id,
+            len(chunks),
+            elapsed,
+        )
+    except Exception:  # noqa: BLE001
+        elapsed = time.monotonic() - start_ts
+        logger.exception(
+            "ingest job %s FAILED after %.2fs", job_id, elapsed
+        )
         _update(job_id, status="failed", error=str(exc))
