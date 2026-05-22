@@ -9,7 +9,7 @@ from typing import Callable
 
 from langchain_core.documents import Document
 
-from app.deps import get_vectorstore
+from app.deps import get_chroma_client, get_vectorstore
 from app.ingestion.loaders import load_aws, load_terraform
 from app.ingestion.splitter import split_documents
 from app.models import IngestJob, SourceName
@@ -86,7 +86,25 @@ def run_ingest(job_id: str) -> None:
             f"{c.metadata.get('source')}::{c.metadata.get('doc_id')}::{i}"
             for i, c in enumerate(chunks)
         ]
-        vs.add_documents(chunks, ids=ids)
+        # Ask the Chroma server for its current per-call limit instead of guessing.
+        # Falls back to a safe default if the client doesn't expose it.
+        try:
+            server_limit = get_chroma_client().get_max_batch_size()
+        except Exception:  # noqa: BLE001
+            server_limit = 5461
+        batch_size = max(1, server_limit - 64)  # small headroom
+        total = len(chunks)
+        logger.info(
+            "ingest job %s upserting %d chunks in batches of %d (server limit=%d)",
+            job_id, total, batch_size, server_limit,
+        )
+        for start in range(0, total, batch_size):
+            end = min(start + batch_size, total)
+            vs.add_documents(chunks[start:end], ids=ids[start:end])
+            logger.info(
+                "ingest job %s batched %d/%d chunks into chroma",
+                job_id, end, total,
+            )
 
         _update(job_id, status="complete", chunks_ingested=len(chunks))
         elapsed = time.monotonic() - start_ts
