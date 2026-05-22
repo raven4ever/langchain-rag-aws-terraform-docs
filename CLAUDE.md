@@ -6,7 +6,7 @@ Project context for Claude Code. This file captures the decisions and design for
 
 ## Project Overview
 
-A retrieval-augmented Q&A API that answers questions about **Terraform AWS provider configuration**, cross-referencing the official **AWS service documentation** (scoped to IAM). Built primarily as a learning exercise for LangChain RAG patterns, runs entirely locally via Docker Compose, no cloud API keys required.
+**TerraSage** — a retrieval-augmented Q&A API that answers questions about **Terraform AWS provider configuration**, cross-referencing the official **AWS service documentation** (initial scope: IAM, expandable to other AWS services). Built primarily as a learning exercise for LangChain RAG patterns, runs entirely locally via Docker Compose, no cloud API keys required.
 
 ## Goals & Non-Goals
 
@@ -26,7 +26,7 @@ A retrieval-augmented Q&A API that answers questions about **Terraform AWS provi
 
 ## Tech Stack
 
-- **API framework**: FastAPI (Python 3.11+)
+- **API framework**: FastAPI (Python 3.14+)
 - **Orchestration**: LangChain (use LCEL / `|` pipe syntax, not legacy `LLMChain`)
 - **LLM + Embeddings**: Ollama
   - LLM: `llama3.1:8b` (start with `llama3.2:3b` if hardware is constrained)
