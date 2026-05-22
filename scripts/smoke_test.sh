@@ -52,7 +52,7 @@ ingest_and_wait() {
     if (( $(date +%s) > deadline )); then
       fail "ingest timed out after ${TIMEOUT_S}s (service=${service} source=${source}; last: ${status_body})"
     fi
-    sleep 2
+    sleep 10
   done
   green "    ingestion for service=${service} source=${source} FINISHED"
 }
