@@ -33,7 +33,6 @@ A retrieval-augmented Q&A API that answers questions about **Terraform AWS provi
   - Embeddings: `nomic-embed-text`
 - **Vector store**: Chroma (server mode, separate container)
 - **Containerization**: Docker Compose
-- **Observability** (optional): LangSmith for tracing
 
 ## Architecture
 
@@ -266,7 +265,6 @@ Goal: improve retrieval where naive top-k falls short.
 - [ ] Query rewriting step before retrieval (improves vague/follow-up questions)
 - [ ] Streaming responses via `.astream()` and `StreamingResponse`
 - [ ] Reranker (Cohere rerank API, or local BGE reranker via sentence-transformers)
-- [ ] LangSmith tracing wired in (env-var gated)
 - [ ] Conversational memory for follow-up questions (`history_aware_retriever`)
 
 **Acceptance criteria** (per sub-feature): each addition is independently toggleable and ships with a test demonstrating its effect vs. the Phase 2 baseline.
