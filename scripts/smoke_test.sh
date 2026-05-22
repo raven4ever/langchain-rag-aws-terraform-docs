@@ -17,8 +17,8 @@
 set -euo pipefail
 
 API="${API:-http://localhost:8000}"
-TF_PATH="${TF_PATH:-/data/terraform}"
-AWS_PATH="${AWS_PATH:-/data/aws}"
+TF_PATH="${TF_PATH:-../data/terraform}"
+AWS_PATH="${AWS_PATH:-../data/aws}"
 TIMEOUT_S="${TIMEOUT_S:-600}"
 EXPECT_KEYWORD="${EXPECT_KEYWORD:-assume_role_policy}"
 QUESTION="${QUESTION:-What argument on aws_iam_role sets the trust policy, and what does the AWS IAM service require it to contain?}"
