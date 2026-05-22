@@ -52,20 +52,18 @@ This calls `ollama pull llama3.1:8b` and `ollama pull nomic-embed-text` on the h
 
 This sparse-checks-out `hashicorp/terraform-provider-aws` and populates `./data/<svc>/{terraform,aws}/` for each service in `SERVICES_LIST` (IAM by default).
 
-By default the script fetches docs for the top 10 AWS services: `iam s3 ec2
-vpc lambda rds cloudwatch cloudformation route53 dynamodb`. Override the set
-with the `SERVICES` env var:
+By default the script fetches docs for the top 10 AWS services: `iam s3 ec2 vpc lambda rds cloudwatch cloudformation route53 dynamodb`. Override the set with the `SERVICES` env var:
 
 ```bash
 SERVICES="iam s3" ./scripts/fetch_docs.sh
 ```
 
-For each service the script pulls (a) Terraform provider docs filtered by the
-`<svc>_*.html.markdown` filename prefix, (b) the AWS User Guide and API
-Reference PDFs, and (c) a CloudFormation resource spec filtered to
-`AWS::<Service>::*`. `jq` is a soft dep — if missing, the full unfiltered CFN
-spec is copied into every service dir instead. Adding a new service means
-adding a case arm to `aws_urls()` inside the script.
+For each service the script pulls
+
+- Terraform provider docs filtered by the `<svc>_*.html.markdown` filename prefix,
+- the AWS User Guide and API
+
+Reference PDFs, and (c) a CloudFormation resource spec filtered to `AWS::<Service>::*`. `jq` is a soft dep — if missing, the full unfiltered CFN spec is copied into every service dir instead. Adding a new service means adding a case arm to `aws_urls()` inside the script.
 
 ### 4. Bring up Chroma
 
@@ -157,14 +155,32 @@ FastAPI auto-generates an OpenAPI schema and serves two browser UIs:
 
 ## Smoke test
 
-Make sure the api is already running (step 5).
+Make sure the api is already running (step 5) and that `./scripts/fetch_docs.sh` has populated `./data/`.
 
 ```bash
 ./scripts/smoke_test.sh
 ```
 
-Runs the full happy path against the running stack using a small fixture corpus and asserts that the resulting answer contains `assume_role_policy`. Set the `TIMEOUT_S` environment variable if the LLM takes longer than the default (e.g. on CPU-only hardware):
+What it does:
+
+1. Hits `/health` and asserts both Ollama and Chroma report healthy.
+2. For each service in `SERVICES_LIST` (default = the top 10), POSTs `/ingest` for the Terraform corpus, then the AWS corpus, and waits for each job to finish.
+3. Asks 5 questions ordered easiest → hardest. For each, asserts the answer is non-empty, contains a case-insensitive expected keyword, and that `sources[]` is non-empty (Phase 2 citation contract).
+
+### Questions
+
+| #   | Type           | Services exercised           | Question                                                                                                                                                              | Expected keyword |
+| --- | -------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| 1   | Single-service | IAM                          | How do I create an IAM role in Terraform?                                                                                                                             | `aws_iam_role`   |
+| 2   | Single-service | S3                           | How do I enable versioning on an S3 bucket using the Terraform AWS provider?                                                                                          | `aws_s3_bucket`  |
+| 3   | Cross-service  | IAM + Lambda + S3            | How do I grant an AWS Lambda function read and write permissions to an S3 bucket, using an IAM role attached to the function?                                         | `lambda`         |
+| 4   | Cross-service  | CloudWatch + RDS             | How do I configure a CloudWatch alarm in Terraform that fires when an RDS DB instance's CPU utilization stays above 80% for 5 minutes?                                | `cloudwatch`     |
+| 5   | Cross-service  | Route 53 + Lambda + DynamoDB | How do I expose an AWS Lambda function behind a custom domain managed by Route 53, where the function reads and writes to a DynamoDB table, all defined in Terraform? | `route53`        |
+
+Override knobs:
 
 ```bash
-TIMEOUT_S=180 ./scripts/smoke_test.sh
+TIMEOUT_S=1200 ./scripts/smoke_test.sh                    # bump per-ingest timeout
+SERVICES_LIST="iam s3" ./scripts/smoke_test.sh            # ingest only a subset
+API=http://localhost:8000 ./scripts/smoke_test.sh         # point at a different host
 ```
