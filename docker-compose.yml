@@ -1,19 +1,4 @@
 services:
-  ollama:
-    image: ollama/ollama:latest
-    container_name: rag-ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_models:/root/.ollama
-    healthcheck:
-      test: [ "CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1" ]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-      start_period: 30s
-    restart: unless-stopped
-
   chroma:
     image: chromadb/chroma:latest
     container_name: rag-chroma
@@ -35,18 +20,19 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - CHROMA_HOST=chroma
       - CHROMA_PORT=8000
       - LLM_MODEL=llama3.1:8b
       - EMBED_MODEL=nomic-embed-text
       - CHROMA_COLLECTION=iam_docs
       - DATA_DIR=/data
+    extra_hosts:
+      # Linux: maps host.docker.internal to the host gateway. macOS/Windows auto-resolve.
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./data:/data
     depends_on:
-      ollama:
-        condition: service_healthy
       chroma:
         condition: service_started
     healthcheck:
@@ -58,5 +44,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  ollama_models:
   chroma_data:
