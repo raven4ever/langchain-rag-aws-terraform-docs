@@ -102,7 +102,9 @@ def run_ingest(job_id: str) -> None:
             server_limit = get_chroma_client().get_max_batch_size()
         except Exception:  # noqa: BLE001
             server_limit = 5461
-        per_chunk_bytes = s.chunk_size + s.embed_dim * 4 + 512  # text+vector+meta+JSON overhead
+        # Each float in the embedding is JSON-serialized (e.g. "-0.123456789,") which
+        # is roughly 12 bytes wire-size, not 4. That's the big term, not the text.
+        per_chunk_bytes = s.chunk_size + s.embed_dim * 12 + 512
         http_limit = max(1, s.chroma_http_max_bytes // per_chunk_bytes)
         batch_size = max(1, min(server_limit, http_limit) - 64)
         total = len(chunks)
