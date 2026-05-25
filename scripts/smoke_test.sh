@@ -25,7 +25,11 @@ DATA_ROOT="${DATA_ROOT:-${REPO_ROOT}/data}"
 
 bold()  { printf '\033[1m%s\033[0m\n' "$*"; }
 green() { printf '\033[32m%s\033[0m\n' "$*"; }
+red()   { printf '\033[31m%s\033[0m\n' "$*"; }
 fail()  { printf '\033[31mFAIL: %s\033[0m\n' "$*" >&2; exit 1; }
+
+# Per-question results, collected for the final summary.
+RESULTS=()    # entries: "OK|Q1|reason" or "FAIL|Q1|reason"
 
 ingest_and_wait() {
   # ingest_and_wait <source> <path> <service>
@@ -59,26 +63,47 @@ ingest_and_wait() {
 
 ask_and_assert() {
   # ask_and_assert <label> <expect_keyword> <question>
+  # Records the outcome in RESULTS instead of exiting on failure.
   local label="$1" kw="$2" question="$3"
   bold "==> ${label}"
   echo "    Q: ${question}"
-  local body resp answer sources_count
+
+  local body resp answer sources_count reason status
   body="$(printf '%s' "${question}" | python3 -c 'import json,sys; print(json.dumps({"question": sys.stdin.read()}))')"
-  resp="$(curl -fsS -X POST "${API}/ask" \
-    -H 'Content-Type: application/json' \
-    -d "${body}")"
-  answer="$(echo "${resp}" | python3 -c 'import json,sys; print(json.load(sys.stdin)["answer"])')"
-  sources_count="$(echo "${resp}" | python3 -c 'import json,sys; print(len(json.load(sys.stdin).get("sources",[])))')"
+
+  if ! resp="$(curl -fsS -X POST "${API}/ask" \
+        -H 'Content-Type: application/json' \
+        -d "${body}" 2>&1)"; then
+    reason="HTTP error from /ask: ${resp}"
+    red "    FAIL (${reason})"
+    RESULTS+=("FAIL|${label}|${reason}")
+    return 0
+  fi
+
+  answer="$(echo "${resp}" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("answer",""))' 2>/dev/null || echo "")"
+  sources_count="$(echo "${resp}" | python3 -c 'import json,sys; print(len(json.load(sys.stdin).get("sources",[])))' 2>/dev/null || echo "0")"
 
   echo "    --- ANSWER (${#answer} chars, ${sources_count} sources) ---"
   echo "${answer}" | sed 's/^/    /'
 
-  [[ -n "${answer}" ]]              || fail "${label}: empty answer"
-  echo "${answer}" | grep -qi "${kw}" \
-    || fail "${label}: answer missing expected keyword '${kw}'"
-  [[ "${sources_count}" -gt 0 ]] \
-    || fail "${label}: sources[] is empty (Phase 2 expects citations)"
-  green "    OK (sources=${sources_count})"
+  if [[ -z "${answer}" ]]; then
+    reason="empty answer"
+  elif ! echo "${answer}" | grep -qi "${kw}"; then
+    reason="missing expected keyword '${kw}'"
+  elif [[ "${sources_count}" -le 0 ]]; then
+    reason="sources[] is empty (Phase 2 expects citations)"
+  else
+    reason="sources=${sources_count}"
+    status="OK"
+  fi
+
+  if [[ "${status:-FAIL}" == "OK" ]]; then
+    green "    OK (${reason})"
+    RESULTS+=("OK|${label}|${reason}")
+  else
+    red "    FAIL (${reason})"
+    RESULTS+=("FAIL|${label}|${reason}")
+  fi
 }
 
 # Health + ingest ------------------------------------------------------------
@@ -120,4 +145,27 @@ for i in "${!QUESTIONS[@]}"; do
   ask_and_assert "Q$((i + 1))" "${KW}" "${Q}"
 done
 
-bold "==> PASS (5/5 questions answered with citations)"
+# Summary --------------------------------------------------------------------
+
+bold "==> Summary"
+pass_count=0
+fail_count=0
+for entry in "${RESULTS[@]}"; do
+  IFS='|' read -r status label reason <<< "${entry}"
+  if [[ "${status}" == "OK" ]]; then
+    green   "  ✓ ${label}  ${reason}"
+    pass_count=$((pass_count + 1))
+  else
+    red     "  ✗ ${label}  ${reason}"
+    fail_count=$((fail_count + 1))
+  fi
+done
+
+total=$(( pass_count + fail_count ))
+if (( fail_count == 0 )); then
+  bold "==> PASS (${pass_count}/${total} questions answered with citations)"
+  exit 0
+else
+  bold "==> FAIL (${pass_count}/${total} passed, ${fail_count} failed)"
+  exit 1
+fi
